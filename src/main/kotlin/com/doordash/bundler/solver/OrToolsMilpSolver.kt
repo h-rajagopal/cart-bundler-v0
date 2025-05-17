@@ -9,6 +9,7 @@ import com.google.ortools.sat.LinearExpr
 import com.google.ortools.sat.IntVar
 import org.slf4j.LoggerFactory
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -97,10 +98,10 @@ class OrToolsMilpSolver(
 
     companion object {
         // Keep portions fair - no single item should dominate
-        private const val MAX_SINGLE_ITEM_PERCENTAGE = 0.25  // Max 25% of total order
-        private const val MIN_ITEM_PERCENTAGE = 0.05   // At least 5% if selected
-        private const val MIN_DIFFERENT_ITEMS = 4      // Use at least 4 different items
-        private const val TARGET_DISTRIBUTION_RANGE = 0.15  // Keep portion sizes within 15% of each other
+        private const val MAX_SINGLE_ITEM_PERCENTAGE = 0.5  // Max 50% of total order for small orders
+        private const val MIN_ITEM_PERCENTAGE = 0.1   // At least 10% if selected for small orders
+        private const val MIN_DIFFERENT_ITEMS = 2      // Use at least 2 different items
+        private const val TARGET_DISTRIBUTION_RANGE = 0.3  // Keep portion sizes within 30% of each other for small orders
     }
 
     /**
@@ -150,6 +151,12 @@ class OrToolsMilpSolver(
         // Create a new MILP model
         val model = CpModel()
         
+        // Calculate size-dependent constraints
+        val minItems = min(MIN_DIFFERENT_ITEMS, req.people)
+        val maxItemPercentage = if (req.people <= 5) MAX_SINGLE_ITEM_PERCENTAGE else 0.25
+        val minItemPercentage = if (req.people <= 5) MIN_ITEM_PERCENTAGE else 0.05
+        val distributionRange = if (req.people <= 5) TARGET_DISTRIBUTION_RANGE else 0.15
+        
         // DECISION VARIABLES
         // Primary Variables: x[i] = number of units to order for item i
         // - Domain: 0 to availableQty (integer)
@@ -176,7 +183,9 @@ class OrToolsMilpSolver(
                 .filter { it.value.diet == diet }
                 .map { itemVars[it.index] }
                 .toTypedArray()
-            model.addGreaterOrEqual(LinearExpr.sum(dietVars), need.toLong())
+            if (dietVars.isNotEmpty()) {
+                model.addGreaterOrEqual(LinearExpr.sum(dietVars), need.toLong())
+            }
         }
 
         // CONSTRAINT 3: Budget Limit
@@ -223,7 +232,7 @@ class OrToolsMilpSolver(
                 // DISTRIBUTION CONSTRAINT
                 // Mathematical: |x[i] - x[j]| ≤ range * people when both selected
                 // Business: Selected items should have similar quantities
-                val targetRange = (req.people * TARGET_DISTRIBUTION_RANGE * 0.8).toLong()
+                val targetRange = (req.people * distributionRange * 0.8).toLong()
                 model.addLessOrEqual(
                     LinearExpr.weightedSum(arrayOf(itemVars[i], itemVars[j]), longArrayOf(1, -1)),
                     targetRange
@@ -248,7 +257,7 @@ class OrToolsMilpSolver(
                 // Business: Each selected item must be meaningful portion
                 model.addGreaterOrEqual(
                     LinearExpr.term(itemVar, 100),
-                    LinearExpr.term(totalServings, (MIN_ITEM_PERCENTAGE * 100).toLong())
+                    LinearExpr.term(totalServings, (minItemPercentage * 100).toLong())
                 ).onlyEnforceIf(isSelected)
 
                 // MAXIMUM PORTION CONSTRAINT
@@ -256,7 +265,7 @@ class OrToolsMilpSolver(
                 // Business: No single item should dominate
                 model.addLessOrEqual(
                     LinearExpr.term(itemVar, 100),
-                    LinearExpr.term(totalServings, (MAX_SINGLE_ITEM_PERCENTAGE * 100).toLong())
+                    LinearExpr.term(totalServings, (maxItemPercentage * 100).toLong())
                 )
             }
         }
@@ -266,7 +275,7 @@ class OrToolsMilpSolver(
         // Business: Must use at least 4 different items
         model.addGreaterOrEqual(
             LinearExpr.sum(selectedItems.toTypedArray()),
-            MIN_DIFFERENT_ITEMS.toLong()
+            minItems.toLong()
         )
 
         // CONSTRAINT 8: Solution Diversity
@@ -402,16 +411,19 @@ class OrToolsMilpSolver(
         val minQty = quantities.minOrNull() ?: 0.0
         val qtyRange = maxQty - minQty
         
+        val minItems = min(MIN_DIFFERENT_ITEMS, req.people)
+        val maxItemPercentage = if (req.people <= 5) MAX_SINGLE_ITEM_PERCENTAGE else 0.25
+        
         val distributionScore = when {
-            solution.size < MIN_DIFFERENT_ITEMS -> 0.0
-            qtyRange > MAX_SINGLE_ITEM_PERCENTAGE -> 0.0
-            else -> 10.0 * (1.0 - (qtyRange / MAX_SINGLE_ITEM_PERCENTAGE))
+            solution.size < minItems -> 0.0
+            qtyRange > maxItemPercentage -> 0.0
+            else -> 10.0 * (1.0 - (qtyRange / maxItemPercentage))
         }
 
         // Calculate diversity score based on number of different items
         val diversityScore = when {
-            solution.size < MIN_DIFFERENT_ITEMS -> 0.0
-            else -> 10.0 * (solution.size.toDouble() / (MIN_DIFFERENT_ITEMS * 2))
+            solution.size < minItems -> 0.0
+            else -> 10.0 * (solution.size.toDouble() / (minItems * 2))
         }
 
         return (costScore + popularityScore + ratingScore + kitchenScore + distributionScore + diversityScore).toInt()

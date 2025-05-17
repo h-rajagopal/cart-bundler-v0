@@ -71,58 +71,66 @@ Common Requirement | Technical Term | Math Behind It | Real Example
 
 ## 3. System Components
 
-Let's understand each part of our system like a restaurant kitchen:
+The system consists of four primary components, each handling specific aspects of the optimization process:
 
-### Order Taker (REST API Layer)
-```
-What It Does:
-- Takes customer orders (like a waiter)
-- Checks if orders make sense (like a senior waiter)
-- Passes orders to the kitchen (returns menu plans)
+### REST API Layer
+```kotlin
+Core Functions:
+- Request handling and validation
+- Input parameter normalization
+- Response transformation
+- Error handling and validation
 
-Technical Terms:
-- HTTP endpoint = Digital order counter
-- Input validation = Order check
-- DTO transformation = Order ticket creation
-```
-
-### Kitchen Manager (Bundle Service)
-```
-What It Does:
-- Coordinates between stations (planning)
-- Compares different ways to make order (options)
-- Suggests the best approach (recommendations)
-
-Technical Terms:
-- Solver orchestration = Kitchen coordination
-- Solution comparison = Checking different methods
-- Strategy selection = Choosing best cooking method
+Technical Implementation:
+- HTTP endpoints for bundle creation
+- Request/Response DTOs
+- Input validation rules
+- Error response mapping
 ```
 
-### Master Chef (MILP Solver)
-```
-What It Does:
-- Plans perfect meal combinations
-- Makes sure all requirements are met
-- Finds the most efficient solution
+### Bundle Service
+```kotlin
+Core Functions:
+- Optimization orchestration
+- Solution evaluation
+- Strategy determination
+- Result aggregation
 
-Technical Terms:
-- Variable creation = Listing all possible ingredients
-- Constraint satisfaction = Following recipe rules
-- Objective minimization = Getting best results
+Technical Implementation:
+- Algorithm selection logic
+- Solution comparison metrics
+- Multi-solution generation
+- Performance monitoring
 ```
 
-### Quick Chef (Greedy Solver)
-```
-What It Does:
-- Makes fast decisions
-- Uses simple, proven rules
-- Gets good results quickly
+### MILP Solver
+```kotlin
+Core Functions:
+- Global optimization
+- Constraint satisfaction
+- Solution optimality
+- Multi-objective optimization
 
-Technical Terms:
-- Priority sorting = Picking most important items first
-- Iterative selection = Adding items one by one
-- Local optimization = Making each choice good
+Technical Implementation:
+- Variable generation
+- Constraint modeling
+- Objective function optimization
+- Solution validation
+```
+
+### Greedy Solver
+```kotlin
+Core Functions:
+- Fast approximation
+- Iterative optimization
+- Local decision making
+- Rapid solution generation
+
+Technical Implementation:
+- Priority-based sorting
+- Incremental selection
+- Local optimization
+- Solution verification
 ```
 
 ---
