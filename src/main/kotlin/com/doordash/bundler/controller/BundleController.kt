@@ -13,10 +13,12 @@ import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
-class BundleController (private val service: BundleService) {
+@RequestMapping("/v1")
+class BundleController(private val service: BundleService) {
 
     @PostMapping("/bundles")
     fun getBundles(@RequestBody req: BundleRequestDTO): ResponseEntity<BundleResponse> =
@@ -27,10 +29,10 @@ class BundleController (private val service: BundleService) {
             } catch (e: BundleException) {
                 ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(
                     BundleResponse(
-                        milpSolutions = emptyList(),
-                        greedySolutions = emptyList(),
-                        recommendedApproach = "NONE",
-                        recommendation = "Could not find valid solutions: ${e.message}"
+                        solutions = emptyList(),
+                        solverType = req.solver,
+                        findingTimeMs = 0,
+                        message = "Could not find valid solutions: ${e.message}"
                     )
                 )
             }
@@ -55,10 +57,10 @@ class BundleController (private val service: BundleService) {
             }
 
         return BundleResponse(
-            milpSolutions = milpSolutions.toBundleSolutions(),
-            greedySolutions = greedySolutions.toBundleSolutions(),
-            recommendedApproach = recommendedApproach,
-            recommendation = recommendation
+            solutions = solutions.toBundleSolutions(),
+            solverType = solverType,
+            findingTimeMs = findingTimeMs,
+            message = "Found ${solutions.size} solutions using ${solverType.name} solver"
         )
     }
 } 

@@ -133,6 +133,19 @@ Technical Implementation:
 - Solution verification
 ```
 
+### Brute Force Solver
+```kotlin
+Core Functions:
+- Complete enumeration
+- Validation and filtering
+- Solution scoring
+
+Technical Implementation:
+- Combination generation
+- Constraint checking
+- Quality calculation
+```
+
 ---
 
 ## 4. How It Works - From Order to Solution
@@ -360,19 +373,109 @@ val randomizedItems = items.map { it to random.nextDouble() }
   * Highly Rated Items (0-5 points)
   * Kitchen Efficiency (0-4 points)
 
-### 5.3 Choosing Your Chef
+### 5.3 The Thorough Chef (Brute Force Solver) - Checks Everything!
 
-The key differences between the solvers are reflected in their implementations:
+The Brute Force solver is implemented in [`BruteForceSolver.kt`][brute-force-solver]. Here's how it works:
 
-Master Chef (MILP) | Quick Chef (Greedy)
-------------------|-------------------
-Global optimization ([Lines 285-297][milp-cost-min]) | Local decisions ([Lines 196-224][greedy-dietary])
-Complex constraints ([Lines 106-193][milp-constraints]) | Simple rules ([Lines 102-116][greedy-sorting])
-Perfect but slower (Full model solve) | Fast but approximate (Single pass)
-100% optimal solution | 80-90% optimal solution
+#### Combination Generation
+
+**CG-1: Generate All Possibilities**
+- What: Create every possible valid combination of items through exhaustive search
+- Code: [`BruteForceSolver.kt:76-111`][brute-force-gen]
+- Implementation:
+```kotlin
+private fun generateAndCheckCombinations(
+    currentIndex: Int,
+    currentCombination: MutableMap<ItemUnit, Int>,
+    solutions: MutableList<Solution>,
+    k: Int,
+    startTime: Long,
+    items: List<ItemUnit>
+) {
+    // Recursive backtracking to explore all combinations
+    // Try different quantities (0 to max) for each item
+    // Apply early pruning for efficiency
+    // Store valid solutions as they're found
+}
+```
+
+#### Smart Pruning and Validation
+
+**SP-1: Early Constraint Checking**
+- What: Prune invalid branches early to improve performance
+- Code: [`BruteForceSolver.kt:115-131`][brute-force-validate]
+- Implementation:
+```kotlin
+private fun canAdd(
+    item: ItemUnit,
+    quantity: Int,
+    currentCombination: Map<ItemUnit, Int>
+): Boolean {
+    // Check kitchen capacity
+    // Verify budget constraints
+    // If any constraint fails, prune this branch
+}
+```
+
+**VF-1: Comprehensive Validation**
+- What: Validate each combination against all requirements
+- Code: [`BruteForceSolver.kt:145-176`][brute-force-validate]
+- Implementation:
+```kotlin
+private fun isValidCombination(combination: Map<ItemUnit, Int>): Boolean {
+    // Check total servings
+    // Verify dietary requirements
+    // Validate portion sizes (adaptive based on group size)
+    // Ensure fair distribution of items
+}
+```
+
+#### Dynamic Group Size Adaptation
+
+**DG-1: Adaptive Constraints**
+- What: Adjust distribution constraints based on group size
+- Implementation:
+```kotlin
+// For small groups (≤5 people)
+val minItemPercentage = MIN_ITEM_PERCENTAGE_SMALL   // 10%
+val maxItemPercentage = MAX_ITEM_PERCENTAGE_SMALL   // 50%
+val targetDistributionRange = TARGET_DISTRIBUTION_RANGE_SMALL  // 30%
+
+// For large groups (>5 people)
+val minItemPercentage = MIN_ITEM_PERCENTAGE_LARGE   // 5%
+val maxItemPercentage = MAX_ITEM_PERCENTAGE_LARGE   // 25%
+val targetDistributionRange = TARGET_DISTRIBUTION_RANGE_LARGE  // 15%
+```
+
+#### Solution Scoring
+
+**SS-1: Calculate Quality**
+- What: Score each valid combination
+- Code: [`BruteForceSolver.kt:198-226`][brute-force-score]
+- Components:
+  * Cost Efficiency (25 points): How well budget is utilized
+  * Popular Items (20 points): Percentage of popular items
+  * Highly Rated Items (20 points): Percentage of highly rated items
+  * Kitchen Efficiency (15 points): Optimal kitchen capacity usage
+  * Distribution Fairness (10 points): Even portion distribution
+  * Item Diversity (10 points): Variety of different items
+
+### 5.4 Choosing Your Chef
+
+Now with three approaches, here's when to use each:
+
+Master Chef (MILP) | Quick Chef (Greedy) | Thorough Chef (Brute Force)
+------------------|-------------------|----------------------
+Global optimization | Local decisions | Complete enumeration
+Complex constraints | Simple rules | Exhaustive checking
+Perfect but slower | Fast but approximate | Guaranteed optimal but slowest
+100% optimal | 80-90% optimal | 100% optimal with all possibilities
+0.2-2 seconds | 0.01-0.05 seconds | 1-60 seconds (menu size dependent)
+Best for important orders | Best for quick orders | Best for small menus or testing
 
 [milp-solver]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt
 [greedy-solver]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt
+[brute-force-solver]: src/main/kotlin/com/doordash/bundler/solver/BruteForceSolver.kt
 [milp-quantity-vars]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L95-L98
 [milp-selection-vars]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L182-L185
 [milp-combination-vars]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L156-L159
@@ -386,12 +489,14 @@ Perfect but slower (Full model solve) | Fast but approximate (Single pass)
 [milp-quality-bonus]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L288-L293
 [milp-base-metrics]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L299-L308
 [milp-optimality-score]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L346-L397
-[milp-constraints]: src/main/kotlin/com/doordash/bundler/solver/OrToolsMilpSolver.kt#L106-L193
 [greedy-sorting]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt#L102-L116
 [greedy-dietary]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt#L196-L214
 [greedy-capacity]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt#L216-L224
 [greedy-base-score]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt#L126-L141
 [greedy-bonus]: src/main/kotlin/com/doordash/bundler/solver/GreedySolver.kt#L243-L279
+[brute-force-gen]: src/main/kotlin/com/doordash/bundler/solver/BruteForceSolver.kt#L76-L111
+[brute-force-validate]: src/main/kotlin/com/doordash/bundler/solver/BruteForceSolver.kt#L115-L131
+[brute-force-score]: src/main/kotlin/com/doordash/bundler/solver/BruteForceSolver.kt#L198-L226
 
 ---
 
@@ -451,32 +556,52 @@ val solution = findOptimalCombination(
 
 ## 7. When to Use What - A Performance Guide
 
-### When to Use Master Chef (MILP Solver)
+### Time & Space Complexity Comparison
+
+| Aspect | MILP Solver | Greedy Solver | Brute Force Solver |
+|--------|-------------|---------------|-------------------|
+| **Time Complexity** | Exponential worst-case (O(2^n)) but often performs well due to branch-and-bound | O(n log n) for sorting + O(n) for selection | O(n^m) where n = items, m = max quantity |
+| **Space Complexity** | O(n) for variables and constraints | O(n) for item storage | O(n*s) where s = number of solutions stored |
+| **Best Case** | Optimal solution for complex constraints | Near-optimal for simpler, well-structured problems | Optimal solution guaranteed (for small inputs) |
+| **Worst Case** | May timeout on very large problems | May produce suboptimal solutions | Exponential explosion with large menus/quantities |
+| **Suitable Input Size** | Medium-large (20-100 items, any group size) | Any size (scales well) | Small (5-15 items, <10 people) |
+
+### Performance Characteristics
+
+| Feature | MILP Solver | Greedy Solver | Brute Force Solver |
+|---------|-------------|---------------|-------------------|
+| **Solution Quality** | Globally optimal | Good approximation | Guaranteed optimal (for completable searches) |
+| **Computation Speed** | Moderate-slow | Very fast | Slow for large inputs, fast for small inputs |
+| **Handles Complex Constraints** | Excellent | Limited | Good |
+| **Scalability** | Good with solver optimizations | Excellent | Poor |
+| **Predictable Runtime** | Variable (harder to predict) | Very predictable | Predictable (but can be very long) |
+| **Memory Usage** | Moderate | Low | High (for large inputs) |
+
+### When to Use Each Approach
+
+| Use Case | Recommended Approach |
+|----------|---------------------|
+| Standard catering (20-50 people) | MILP Solver |
+| Very large orders (100+ people) | Greedy Solver |
+| Small, important events (<10 people) | Brute Force Solver |
+| Quick approximation needed | Greedy Solver |
+| Complex dietary requirements | MILP Solver |
+| Critical budget constraints | MILP or Brute Force Solver |
+| Resource-limited environments | Greedy Solver |
+
+### When to Use Thorough Chef (Brute Force Solver)
 Best For:
-- Important events needing perfect balance
-- Complex dietary requirements
-- Premium events where quality matters
-- When you have 1-2 seconds to plan
+- Small menus (<15 items) or testing
+- Smaller group sizes (<10 people)
+- When you need guaranteed optimal solutions
+- When you have time for more computation
 
 Technical Details:
 ```kotlin
-// Processing Time: Takes longer but gets perfect results
-// Memory Needed: More (tracks many combinations)
-// Result Quality: The absolute best possible
-```
-
-### When to Use Quick Chef (Greedy Solver)
-Best For:
-- Quick lunch orders
-- Simple dietary needs
-- Standard menu items
-- When you need instant results
-
-Technical Details:
-```kotlin
-// Processing Time: Lightning fast
-// Memory Needed: Very little
-// Result Quality: Good (but may not be perfect)
+// Processing Time: Slowest (O(n^m) where n = items, m = max quantity)
+// Memory Needed: More (tracks all valid combinations)
+// Result Quality: 100% optimal with exhaustive search
+// Adapts constraints based on group size for better results with larger groups
 ```
 
 ---

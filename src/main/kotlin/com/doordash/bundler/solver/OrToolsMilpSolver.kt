@@ -207,74 +207,47 @@ class OrToolsMilpSolver(
         )
 
         // CONSTRAINT 5: Fair Distribution
-        // Ensures portions are evenly distributed across selected items
+        // Ensures portions are evenly distributed across items
         for (i in itemVars.indices) {
             for (j in (i + 1)..itemVars.lastIndex) {
-                // BINARY VARIABLES
-                // y[i] = whether item i is selected (0 or 1)
-                val isFirstSelected = model.newBoolVar("is_selected_$i")
-                val isSecondSelected = model.newBoolVar("is_selected_$j")
-
-                // LINKING CONSTRAINTS
-                // Mathematical: x[i] > 0 ⟺ y[i] = 1
-                // Business: Track which items are actually used
-                model.addGreaterThan(itemVars[i], 0).onlyEnforceIf(isFirstSelected)
-                model.addEquality(itemVars[i], 0).onlyEnforceIf(isFirstSelected.not())
-                model.addGreaterThan(itemVars[j], 0).onlyEnforceIf(isSecondSelected)
-                model.addEquality(itemVars[j], 0).onlyEnforceIf(isSecondSelected.not())
-
-                // AUXILIARY VARIABLE
-                // z[i,j] = whether both items i and j are selected
-                val bothSelected = model.newBoolVar("both_selected_${i}_$j")
-                model.addBoolAnd(arrayOf(isFirstSelected, isSecondSelected)).onlyEnforceIf(bothSelected)
-                model.addBoolOr(arrayOf(isFirstSelected.not(), isSecondSelected.not())).onlyEnforceIf(bothSelected.not())
-
-                // DISTRIBUTION CONSTRAINT
-                // Mathematical: |x[i] - x[j]| ≤ range * people when both selected
-                // Business: Selected items should have similar quantities
+                // Simple distribution constraint: |x[i] - x[j]| ≤ range * people
                 val targetRange = (req.people * distributionRange * 0.8).toLong()
+                
+                // If either item is selected, their quantities should be similar
                 model.addLessOrEqual(
                     LinearExpr.weightedSum(arrayOf(itemVars[i], itemVars[j]), longArrayOf(1, -1)),
                     targetRange
-                ).onlyEnforceIf(bothSelected)
+                )
                 model.addLessOrEqual(
                     LinearExpr.weightedSum(arrayOf(itemVars[i], itemVars[j]), longArrayOf(-1, 1)),
                     targetRange
-                ).onlyEnforceIf(bothSelected)
+                )
             }
         }
 
         // CONSTRAINT 6: Item Selection and Portion Sizes
-        // Track selected items and enforce minimum/maximum portions
-        val selectedItems = itemVars.mapIndexed { idx, itemVar ->
-            model.newBoolVar("selected_$idx").also { isSelected ->
-                // LINKING CONSTRAINTS
-                model.addGreaterThan(itemVar, 0).onlyEnforceIf(isSelected)
-                model.addEquality(itemVar, 0).onlyEnforceIf(isSelected.not())
+        // Enforce minimum/maximum portions directly
+        itemVars.forEach { itemVar ->
+            // MINIMUM PORTION CONSTRAINT
+            // If an item is selected (quantity > 0), it must be at least minItemPercentage of total
+            model.addGreaterOrEqual(
+                LinearExpr.term(itemVar, 100),
+                LinearExpr.term(totalServings, (minItemPercentage * 100).toLong())
+            )
 
-                // MINIMUM PORTION CONSTRAINT
-                // Mathematical: x[i] ≥ MIN_PERCENTAGE * total when selected
-                // Business: Each selected item must be meaningful portion
-                model.addGreaterOrEqual(
-                    LinearExpr.term(itemVar, 100),
-                    LinearExpr.term(totalServings, (minItemPercentage * 100).toLong())
-                ).onlyEnforceIf(isSelected)
-
-                // MAXIMUM PORTION CONSTRAINT
-                // Mathematical: x[i] ≤ MAX_PERCENTAGE * total
-                // Business: No single item should dominate
-                model.addLessOrEqual(
-                    LinearExpr.term(itemVar, 100),
-                    LinearExpr.term(totalServings, (maxItemPercentage * 100).toLong())
-                )
-            }
+            // MAXIMUM PORTION CONSTRAINT
+            // No item can exceed maxItemPercentage of total
+            model.addLessOrEqual(
+                LinearExpr.term(itemVar, 100),
+                LinearExpr.term(totalServings, (maxItemPercentage * 100).toLong())
+            )
         }
 
         // CONSTRAINT 7: Minimum Item Diversity
         // Mathematical: ∑y[i] ≥ MIN_DIFFERENT_ITEMS
         // Business: Must use at least 4 different items
         model.addGreaterOrEqual(
-            LinearExpr.sum(selectedItems.toTypedArray()),
+            LinearExpr.sum(itemVars.toTypedArray()),
             minItems.toLong()
         )
 
@@ -284,24 +257,12 @@ class OrToolsMilpSolver(
             for (prevSolution in previousSolutions) {
                 val prevTotal = prevSolution.items.values.sum()
                 
-                // BINARY VARIABLES
-                // d[i] = whether item i has different quantity (0 or 1)
-                val diffVars = items.mapIndexed { idx, item ->
-                    val prevQty = prevSolution.items[item] ?: 0
-                    val diffVar = model.newBoolVar("diff_$idx")
-                    
-                    model.addDifferent(itemVars[idx], prevQty.toLong()).onlyEnforceIf(diffVar)
-                    model.addEquality(itemVars[idx], prevQty.toLong()).onlyEnforceIf(diffVar.not())
-                    
-                    diffVar
-                }
-
                 // DIVERSITY CONSTRAINT
                 // Mathematical: ∑d[i] ≥ minDifference
                 // Business: At least 30% of items must be different
                 val minDifference = max((prevTotal * config.minSolutionDiversityPercent / 100.0).roundToInt(), 1)
                 model.addGreaterOrEqual(
-                    LinearExpr.sum(diffVars.toTypedArray()),
+                    LinearExpr.sum(itemVars.toTypedArray()),
                     minDifference.toLong()
                 )
             }

@@ -4,6 +4,8 @@ import com.doordash.bundler.dto.BundleRequestDTO
 import com.doordash.bundler.dto.MenuItemDTO
 import com.doordash.bundler.model.BundleRequest
 import com.doordash.bundler.model.ItemUnit
+import com.doordash.bundler.model.SolverType
+import com.doordash.bundler.solver.BruteForceSolver
 import com.doordash.bundler.solver.GreedySolver
 import com.doordash.bundler.solver.OrToolsMilpSolver
 import com.doordash.bundler.solver.Solution
@@ -147,97 +149,45 @@ class BundleService(
             topN = dto.topN,
         )
 
-        // Try both approaches
-        val milpStartTime = System.currentTimeMillis()
-        val milpSolver = OrToolsMilpSolver(units, req, dto.kitchenCap, solverConfig)
-        val milpSolutions = milpSolver.solve(req.topN)
-        val milpTime = System.currentTimeMillis() - milpStartTime
-
-        val greedyStartTime = System.currentTimeMillis()
-        val greedySolver = GreedySolver(units, req, dto.kitchenCap)
-        val greedySolutions = greedySolver.solve(req.topN)
-        val greedyTime = System.currentTimeMillis() - greedyStartTime
-
-        // Analyze results and make a recommendation
-        val recommendation = when {
-            milpSolutions.isEmpty() && greedySolutions.isEmpty() -> 
-                BundleComparison(
-                    milpSolutions = emptyList(),
-                    greedySolutions = emptyList(),
-                    recommendedApproach = "NONE",
-                    recommendation = "No valid solutions found with either approach. " +
-                        "Consider relaxing constraints (budget, dietary requirements, etc.)"
-                )
-
-            milpSolutions.isEmpty() -> 
-                BundleComparison(
-                    milpSolutions = emptyList(),
-                    greedySolutions = greedySolutions,
-                    recommendedApproach = "GREEDY",
-                    recommendation = "Only the quick approach found solutions. " +
-                        "The advanced optimizer couldn't find valid combinations - " +
-                        "your constraints might be too strict."
-                )
-
-            greedySolutions.isEmpty() ->
-                BundleComparison(
-                    milpSolutions = milpSolutions,
-                    greedySolutions = emptyList(),
-                    recommendedApproach = "MILP",
-                    recommendation = "Only the advanced optimizer found solutions. " +
-                        "This suggests your requirements need careful optimization."
-                )
-
-            else -> {
-                // Compare solution quality and timing
-                val bestMilp = milpSolutions.maxOf { it.optimalityScore }
-                val bestGreedy = greedySolutions.maxOf { it.optimalityScore }
-                val scoreDiff = bestMilp - bestGreedy
-                val timeRatio = milpTime.toDouble() / greedyTime
-
-                when {
-                    scoreDiff > 15 && timeRatio < 10 ->
-                        BundleComparison(
-                            milpSolutions = milpSolutions,
-                            greedySolutions = greedySolutions,
-                            recommendedApproach = "MILP",
-                            recommendation = "Use the advanced optimizer solutions. " +
-                                "They're significantly better (${scoreDiff} points) " +
-                                "and only took ${String.format("%.1f", timeRatio)}x longer."
-                        )
-
-                    scoreDiff > 15 ->
-                        BundleComparison(
-                            milpSolutions = milpSolutions,
-                            greedySolutions = greedySolutions,
-                            recommendedApproach = "BOTH",
-                            recommendation = "Consider both options. Advanced solutions are better " +
-                                "but took ${String.format("%.1f", timeRatio)}x longer. " +
-                                "Use quick solutions for testing, advanced for final orders."
-                        )
-
-                    else ->
-                        BundleComparison(
-                            milpSolutions = milpSolutions,
-                            greedySolutions = greedySolutions,
-                            recommendedApproach = "GREEDY",
-                            recommendation = "Use the quick solutions. " +
-                                "They're nearly as good (only ${scoreDiff} points lower) " +
-                                "but ${String.format("%.1f", timeRatio)}x faster!"
-                        )
-                }
+        // Use the requested solver
+        val solutions = when (dto.solver) {
+            SolverType.MILP -> {
+                val startTime = System.currentTimeMillis()
+                val solver = OrToolsMilpSolver(units, req, dto.kitchenCap, solverConfig)
+                val solutions = solver.solve(req.topN)
+                val time = System.currentTimeMillis() - startTime
+                logger.info("MILP: ${solutions.size} solutions in ${time}ms")
+                solutions
+            }
+            SolverType.GREEDY -> {
+                val startTime = System.currentTimeMillis()
+                val solver = GreedySolver(units, req, dto.kitchenCap)
+                val solutions = solver.solve(req.topN)
+                val time = System.currentTimeMillis() - startTime
+                logger.info("Greedy: ${solutions.size} solutions in ${time}ms")
+                solutions
+            }
+            SolverType.BRUTE_FORCE -> {
+                val startTime = System.currentTimeMillis()
+                val solver = BruteForceSolver(units, req, dto.kitchenCap)
+                val solutions = solver.solve(req.topN)
+                val time = System.currentTimeMillis() - startTime
+                logger.info("Brute Force: ${solutions.size} solutions in ${time}ms")
+                solutions
             }
         }
 
-        if (solverConfig.enableDetailedLogging) {
-            logger.info("Solution comparison:")
-            logger.info("MILP: ${milpSolutions.size} solutions in ${milpTime}ms")
-            logger.info("Greedy: ${greedySolutions.size} solutions in ${greedyTime}ms")
-            logger.info("Recommendation: ${recommendation.recommendedApproach}")
-            logger.info("Reason: ${recommendation.recommendation}")
+        return BundleComparison(
+            solutions = solutions,
+            solverType = dto.solver,
+            findingTimeMs = solutions.firstOrNull()?.findingTimeMs ?: 0
+        ).also { comparison ->
+            if (solverConfig.enableDetailedLogging) {
+                logger.info("Found ${solutions.size} solutions")
+                logger.info("Using solver: ${dto.solver.name}")
+                logger.info("Time taken: ${comparison.findingTimeMs}ms")
+            }
         }
-
-        return recommendation
     }
 }
 
@@ -291,26 +241,22 @@ private fun MenuItemDTO.toUnits(): List<ItemUnit> {
 }
 
 /**
- * Holds solutions from both approaches and recommendation.
+ * Holds solutions from the selected solver and performance metrics.
  * 
  * Example:
  * ```
  * {
- *   milpSolutions: [
+ *   solutions: [
  *     Solution(score=85, cost=$350),
  *     Solution(score=82, cost=$355)
  *   ],
- *   greedySolutions: [
- *     Solution(score=72, cost=$360)
- *   ],
- *   recommendedApproach: "MILP",
- *   recommendation: "Use advanced - 13 points better"
+ *   solverType: "BRUTE_FORCE",
+ *   findingTimeMs: 1500
  * }
  * ```
  */
 data class BundleComparison(
-    val milpSolutions: List<Solution>,
-    val greedySolutions: List<Solution>,
-    val recommendedApproach: String,
-    val recommendation: String
+    val solutions: List<Solution>,
+    val solverType: SolverType,
+    val findingTimeMs: Long
 ) 

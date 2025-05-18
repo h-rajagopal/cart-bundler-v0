@@ -1,5 +1,7 @@
 package com.doordash.bundler.dto
 
+import com.doordash.bundler.model.SolverType
+
 /**
  * One item in a bundle solution, showing what to order and how many.
  * 
@@ -97,55 +99,43 @@ data class BundleSolution(
 )
 
 /**
- * Complete response showing different ways to bundle menu items.
- * Includes solutions from both approaches and smart recommendations.
+ * Complete response showing solutions found by the selected solver.
  * 
- * The Two Approaches:
+ * The Three Solvers:
  * 
- * 1. Advanced Optimizer (MILP Solutions):
+ * 1. Advanced Optimizer (MILP):
  *    ✓ Finds the mathematically best combinations
  *    ✓ Considers all possible item combinations
  *    ✓ Usually produces better solutions
  *    → But takes longer (typically 0.2-2 seconds)
  * 
- * 2. Quick Optimizer (Greedy Solutions):
+ * 2. Quick Optimizer (Greedy):
  *    ✓ Uses practical "common sense" rules
  *    ✓ Very fast (typically 0.01-0.05 seconds)
  *    ✓ Good for testing or simple menus
  *    → But might miss some clever combinations
  * 
- * Recommendation System:
- * 
- * The service suggests which solutions to use based on:
- * - Quality difference between approaches
- * - Time difference between approaches
- * - Success rate of each approach
- * 
- * Possible Recommendations:
- * - "MILP": Use advanced solutions (significantly better)
- * - "GREEDY": Use quick solutions (almost as good, much faster)
- * - "BOTH": Consider both (trade-off between quality and speed)
- * - "NONE": No valid solutions found
+ * 3. Thorough Optimizer (Brute Force):
+ *    ✓ Checks every possible combination
+ *    ✓ Guaranteed to find the best solution
+ *    ✓ Perfect for small menus
+ *    → But very slow for large menus
  * 
  * Example Response:
  * ```json
  * {
- *   "milpSolutions": [
+ *   "solutions": [
  *     { "items": [...], "metrics": {...} }
  *   ],
- *   "greedySolutions": [
- *     { "items": [...], "metrics": {...} }
- *   ],
- *   "recommendedApproach": "MILP",
- *   "recommendation": "Use the advanced optimizer solutions. 
- *                     They're significantly better (15 points) 
- *                     and only took 5x longer."
+ *   "solverType": "BRUTE_FORCE",
+ *   "findingTimeMs": 1500,
+ *   "message": "Found 3 solutions using BRUTE_FORCE solver"
  * }
  * ```
  */
 data class BundleResponse(
-    val milpSolutions: List<BundleSolution>,
-    val greedySolutions: List<BundleSolution>,
-    val recommendedApproach: String,
-    val recommendation: String
+    val solutions: List<BundleSolution>,
+    val solverType: SolverType,
+    val findingTimeMs: Long,
+    val message: String
 ) 

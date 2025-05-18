@@ -1,6 +1,7 @@
 package com.doordash.bundler.dto
 
 import com.doordash.bundler.model.DietaryTag
+import com.doordash.bundler.model.SolverType
 import com.fasterxml.jackson.annotation.JsonCreator
 import com.fasterxml.jackson.annotation.JsonProperty
 
@@ -11,4 +12,5 @@ data class BundleRequestDTO @JsonCreator constructor(
     @JsonProperty("topN") val topN: Int = 1,
     @JsonProperty("kitchenCap") val kitchenCap: Int = 10_000,
     @JsonProperty("menu") val menu: List<MenuItemDTO>,
+    @JsonProperty("solver") val solver: SolverType = SolverType.MILP
 ) 
